@@ -101,7 +101,7 @@ public(package) fun new_light_client_with_params(params: Params, start_height: u
         trusted_headers.do!(|raw_header| {
             let header = new_block_header(raw_header);
             let light_block = new_light_block(height, header, current_chain_work);
-            lc.set_block_header_by_height(height, header);
+            lc.set_block_hash_by_height(height, header.block_hash());
             lc.add_light_block(light_block);
             height = height + 1;
             current_chain_work = current_chain_work + light_block.header().calc_work();
@@ -155,9 +155,7 @@ public(package) fun insert_header(c: &mut LightClient, parent_block_hash: vector
     let next_chain_work = parent_block.chain_work() + next_header.calc_work();
     let next_light_block = new_light_block(next_height, next_header, next_chain_work);
 
-    c.finalized_height = next_height;
-    c.add_light_block(next_light_block);
-    c.set_block_header_by_height(next_height, next_header);
+    c.set_latest_block(next_light_block);
     next_header.block_hash()
 }
 
@@ -173,8 +171,6 @@ fun extend_chain(c: &mut LightClient, parent_block_hash: vector<u8>, raw_headers
 
 /// Delete all blocks between head_hash to checkpoint_hash
 public(package) fun rollback(c: &mut LightClient, checkpoint_hash: vector<u8>, head_hash: vector<u8>) {
-    // TODO: Should we handle the case head hash never reach to checkpoint?
-    // B/c if this happend then this is just out of gas to run.
     let mut block_hash = head_hash;
     while (checkpoint_hash != block_hash) {
         let previous_block_hash = c.get_light_block_by_hash(block_hash).header().prev_block();
@@ -192,7 +188,7 @@ public fun latest_height(c: &LightClient): u64 {
 public fun latest_block(c: &LightClient): &LightBlock {
     // TODO: decide return type
     let height = c.latest_height();
-    let block_hash = c.get_block_header_by_height(height).block_hash();
+    let block_hash = c.get_block_hash_by_height(height);
     c.get_light_block_by_hash(block_hash)
 }
 
@@ -210,7 +206,8 @@ public fun verify_tx(
 ): bool {
     // TODO: update this when we have APIs for finalized block.
     // TODO: handle: light block/block_header not exist.
-    let header = c.get_block_header_by_height(height);
+    let block_hash = c.get_block_hash_by_height(height);
+    let header = c.get_light_block_by_hash(block_hash).header();
     let merkle_root = header.merkle_root();
     verify_merkle_proof(merkle_root, proof, tx_id, tx_index)
 }
@@ -229,7 +226,7 @@ public fun client_id_mut(c: &mut LightClient): &mut UID {
 
 public fun relative_ancestor(c: &LightClient, lb: &LightBlock, distance: u64): &LightBlock {
     let ancestor_height = lb.height() - distance;
-    let ancestor_block_hash = c.get_block_header_by_height(ancestor_height).block_hash();
+    let ancestor_block_hash = c.get_block_hash_by_height(ancestor_height);
     return c.get_light_block_by_hash(ancestor_block_hash)
 }
 
@@ -349,22 +346,20 @@ public fun exist(lc: &LightClient, block_hash: vector<u8>): bool {
     exist
 }
 
-public(package) fun set_block_header_by_height(c: &mut LightClient, height: u64, block_header: BlockHeader) {
+public(package) fun set_block_hash_by_height(c: &mut LightClient, height: u64, block_hash: vector<u8>) {
     let cm = c.client_id_mut();
-    df::remove_if_exists<u64, BlockHeader>(cm, height);
-    df::add(cm, height, block_header);
+    df::remove_if_exists<u64, vector<u8>>(cm, height);
+    df::add(cm, height, block_hash);
 }
 
-public fun get_block_header_by_height(c: &LightClient, height: u64): &BlockHeader {
-    // TODO: optimize state because we store header twin,
-    // one in height => header, one in block hash => light block
-    // https://github.com/gonative-cc/move-bitcoin-spv/issues/37
-    df::borrow(c.client_id(), height)
+public fun get_block_hash_by_height(c: &LightClient, height: u64): vector<u8> {
+    // copy the block hash
+    *df::borrow<u64, vector<u8>>(c.client_id(), height)
 }
 
 public(package) fun set_latest_block(c: &mut LightClient, light_block: LightBlock) {
     c.add_light_block(light_block);
-    c.set_block_header_by_height(light_block.height(), *light_block.header());
+    c.set_block_hash_by_height(light_block.height(), light_block.header().block_hash()) ;
     c.finalized_height = light_block.height();
 }
 

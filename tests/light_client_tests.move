@@ -71,7 +71,7 @@ fun test_insert_header_happy_cases() {
     ];
     lc.insert_headers(raw_headers);
     let latest_height = lc.latest_height();
-    let block_hash = lc.get_block_header_by_height(latest_height).block_hash();
+    let block_hash = lc.get_block_hash_by_height(latest_height);
 
     assert!(lc.get_light_block_by_hash(block_hash).header() == new_block_header(raw_headers[0]));
 
