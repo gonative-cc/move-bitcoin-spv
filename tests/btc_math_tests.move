@@ -1,6 +1,6 @@
 #[test_only]
 module bitcoin_spv::btc_math_tests;
-use bitcoin_spv::btc_math::{target_to_bits, bits_to_target, Self};
+use bitcoin_spv::btc_math::{target_to_bits, bits_to_target, compact_size, Self};
 
 
 #[test]
@@ -72,4 +72,44 @@ fun bits_to_target_tests() {
     let target = bits_to_target(bits);
     assert!(target == 0x00ffff0000000000000000000000000000000000000000000000000000000000);
     assert!(bits == target_to_bits(target));
+}
+
+
+
+#[test]
+fun compact_size_tests() {
+    let inputs = vector[
+        x"fa",
+        x"fc",
+        x"fdfd00",
+        x"fdd007",
+        x"fdffff",
+        x"fe00000100",
+        x"fe005a6202",
+        x"feffffffff",
+        x"ff0000000001000000",
+        x"ff98fdffffffffffff",
+        x"ffffffffffffffffff",
+    ];
+    let outputs = vector[
+        vector[250, 1],
+        vector[252, 1],
+        vector[253, 3],
+        vector[2000, 3],
+        vector[65535, 3],
+        vector[65536, 5],
+        vector[40000000, 5],
+        vector[4294967295, 5],
+        vector[4294967296, 9],
+        vector[18446744073709551000, 9],
+        vector[18446744073709551615, 9]
+    ];
+
+    let mut i = 0;
+    while (i < inputs.length()) {
+        let (x, y) = compact_size(inputs[i], 0);
+        assert!(x == outputs[i][0] && (y as u256) == outputs[i][1]);
+        i = i + 1;
+    }
+
 }

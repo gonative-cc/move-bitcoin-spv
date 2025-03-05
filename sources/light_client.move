@@ -5,6 +5,7 @@ use bitcoin_spv::light_block::{LightBlock, new_light_block};
 use bitcoin_spv::merkle_tree::verify_merkle_proof;
 use bitcoin_spv::btc_math::target_to_bits;
 use bitcoin_spv::utils::nth_element;
+use bitcoin_spv::transaction::new_transaction;
 use sui::dynamic_field as df;
 use sui::event;
 
@@ -14,6 +15,7 @@ const ETimeTooOld: u64 = 3;
 const EHeaderListIsEmpty: u64 = 4;
 const EBlockNotFound: u64 = 5;
 const EForkChainWorkTooSmall: u64 = 6;
+const ETxNotInBlock: u64 = 7;
 
 public struct NewLightClientEvent has copy, drop {
     network: u8,
@@ -473,4 +475,34 @@ public entry fun insert_headers(c: &mut LightClient, raw_headers: vector<vector<
         best_block_hash: c.latest_block().header().block_hash(),
         height: c.latest_block().height(),
     });
+}
+
+// verify output transaction
+public entry fun verify_output(
+    c: &LightClient,
+    height: u64,
+    proof: vector<vector<u8>>,
+    tx_index: u64,
+    version: vector<u8>,
+    input_count: u256,
+    inputs: vector<u8>,
+    output_count: u256,
+    outputs: vector<u8>,
+    lock_time: vector<u8>
+): (vector<vector<u8>>, vector<u256>) {
+    let tx = new_transaction(version, input_count, inputs, output_count, outputs, lock_time);
+    let tx_id = tx.tx_id();
+    assert!(c.verify_tx(height, tx_id, proof, tx_index), ETxNotInBlock);
+
+    let outputs = tx.outputs();
+    let mut btc_addresses = vector[];
+    let mut amounts = vector[];
+    let mut i = 0;
+    while (i < outputs.length()) {
+        btc_addresses.push_back(outputs[i].btc_address());
+        amounts.push_back(outputs[i].amount());
+        i = i + 1;
+    };
+
+    (btc_addresses, amounts)
 }
