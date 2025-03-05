@@ -42,6 +42,16 @@ set LC_ID 0x...
 sui client object $LC_ID
 ```
 
+### Create light client
+
+Create a new light client by doing the function call:
+
+```sh
+sui client call --function new_btc_light_client --module light_client --package $PACKAGE_ID --gas-budget 100000000 --args $BTC_NETWORK 0 $INIT_HEADERS 0
+```
+
+`BTC_NETWORK` is 0 for mainnet, 1 for testnet and regtest otherwise.
+
 ### Insert a new header
 
 Now we can insert and prove a new light block (height=20161): (<https://learnmeabitcoin.com/explorer/block/00000000000003c52ff2c90f4e318b7d987c9a6a23c809d0f945d50689411cca>)
