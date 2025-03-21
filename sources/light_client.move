@@ -141,14 +141,14 @@ public entry fun insert_headers(lc: &mut LightClient, raw_headers: vector<vector
     assert!(!raw_headers.is_empty(), EHeaderListIsEmpty);
 
     let first_header = new_block_header(raw_headers[0]);
-    let head = lc.head();
+    let head = *lc.head();
 
     let mut is_forked = false;
     if (first_header.prev_block() == head.header().block_hash()) {
-        // extend current fork
-        lc.extend_chain(first_header.prev_block(), raw_headers);
+        // extend current chain
+        lc.extend_chain(&head, raw_headers);
     } else {
-        // handle a fork choice
+        // handle a new fork
         let parent_id = first_header.prev_block();
         assert!(lc.exist(parent_id), EBlockNotFound);
         let parent = lc.get_light_block_by_hash(parent_id);
@@ -167,16 +167,15 @@ public entry fun insert_headers(lc: &mut LightClient, raw_headers: vector<vector
         let current_chain_work = head.chain_work();
         let current_block_hash = head.header().block_hash();
 
-        let candidate_fork_head_hash = lc.extend_chain(first_header.prev_block(), raw_headers);
-        let candidate_head = lc.get_light_block_by_hash(candidate_fork_head_hash);
-        let candidate_chain_work = candidate_head.chain_work();
+        let fork_head = lc.extend_chain(parent, raw_headers);
+        let fork_chain_work = fork_head.chain_work();
 
-        assert!(current_chain_work < candidate_chain_work, EForkChainWorkTooSmall);
+        assert!(current_chain_work < fork_chain_work, EForkChainWorkTooSmall);
         // If transaction not abort. This is the current chain is less power than
         // the fork. We will update the fork to main chain and remove the old fork
         // notes: current_block_hash is hash of the old fork/chain in this case.
         // TODO(vu): Make it more simple.
-        lc.rollback(first_header.prev_block(), current_block_hash);
+        lc.rollback(parent_id, current_block_hash);
         is_forked = true;
     };
 
@@ -216,43 +215,63 @@ public(package) fun append_block(lc: &mut LightClient, light_block: LightBlock) 
     lc.head_hash = head_hash;
 }
 
+
 /// Insert new header to bitcoin spv
 /// * `parent`: hash of the parent block, must be already recorded in the light client.
 /// NOTE: this function doesn't do fork checks and overwrites the current fork. So it must be
 /// only called internally.
-public(package) fun insert_header(lc: &mut LightClient, parent_block_hash: vector<u8>, next_header: BlockHeader): vector<u8> {
-    let parent_block = lc.get_light_block_by_hash(parent_block_hash);
-    let parent_header = parent_block.header();
+public(package) fun insert_header(lc: &mut LightClient, parent: &LightBlock, header: BlockHeader): &LightBlock {
+    let parent_header = parent.header();
 
     // verify new header
-    assert!(parent_header.block_hash() == next_header.prev_block(), EBlockHashNotMatch);
-    let next_block_difficulty = calc_next_required_difficulty(lc, parent_block, next_header.timestamp());
-    assert!(next_block_difficulty == next_header.bits(), EDifficultyNotMatch);
+    assert!(parent_header.block_hash() == header.prev_block(), EBlockHashNotMatch);
+    let next_block_difficulty = calc_next_required_difficulty(lc, parent, header.timestamp());
+    assert!(next_block_difficulty == header.bits(), EDifficultyNotMatch);
 
 
     // we only check the case "A timestamp greater than the median time of the last 11 blocks".
     // because  network adjusted time requires a miners local time.
     // https://learnmeabitcoin.com/technical/block/time
-    let median_time = lc.calc_past_median_time(parent_block);
-    assert!(next_header.timestamp() > median_time, ETimeTooOld);
-    next_header.pow_check();
+    let median_time = lc.calc_past_median_time(parent);
+    assert!(header.timestamp() > median_time, ETimeTooOld);
+    header.pow_check();
 
     // update new header
-    let next_height = parent_block.height() + 1;
-    let next_chain_work = parent_block.chain_work() + next_header.calc_work();
-    let next_light_block = new_light_block(next_height, next_header, next_chain_work);
+    let next_height = parent.height() + 1;
+    let next_chain_work = parent.chain_work() + header.calc_work();
+    let next_light_block = new_light_block(next_height, header, next_chain_work);
 
     lc.append_block(next_light_block);
-    next_header.block_hash()
+    &next_light_block
 }
 
-fun extend_chain(lc: &mut LightClient, parent_block_hash: vector<u8>, raw_headers: vector<vector<u8>>): vector<u8> {
-    let mut previous_block_hash = parent_block_hash;
+
+/// Extends chain from the given `parent` by inserting new block headers.
+/// Returns ID of the last inserted block header.
+/// NOTE: we need to pass `parent` block to assure we are creating a chain. Consider the
+/// following scenario, where headers that we insert don't form a chain:
+///
+///    A = {parent: Z}
+///    Chain = X-Y-Z  // existing chain
+///    headers = [A, A, A]
+///
+/// the insert would try to insert A multiple times:
+///
+///    X-Y-Z-A
+///        \-A
+///        \-A
+fun extend_chain(lc: &mut LightClient, parent: &LightBlock, raw_headers: vector<vector<u8>>): &LightBlock {
+    // raw_headers.fold!(parent, |p, raw_header| {
+    //     let header = new_block_header(raw_header);
+    //     lc.insert_header(p, header)
+    // } )
+
+    let mut parent = parent;
     raw_headers.do!(|raw_header| {
         let header = new_block_header(raw_header);
-        previous_block_hash = lc.insert_header(previous_block_hash, header);
+        parent = lc.insert_header(parent, header);
     });
-    previous_block_hash
+    parent
 }
 
 
