@@ -27,6 +27,8 @@ const EBlockNotFound: vector<u8> = b"The specified block could not be found in t
 const EForkChainWorkTooSmall: vector<u8> = b"The proposed fork has less work than the current chain";
 #[error]
 const ETxNotInBlock: vector<u8> = b"The transaction is not included in the block according to the Merkle proof";
+#[error]
+const EInvalidStartHeight: vector<u8> = b"The start height must be a multiple of the retarget period (e.g 2016 for mainnet)";
 
 public struct NewLightClientEvent has copy, drop {
     light_client_id: ID
@@ -63,6 +65,10 @@ fun init(_ctx: &mut TxContext) {
 
 /// internal funciton to create a light client
 public(package) fun new_light_client_with_params_int(params: Params, start_height: u64, trusted_headers: vector<vector<u8>>, start_chain_work: u256, finality: u64, ctx: &mut TxContext): LightClient {
+    if (params.blocks_pre_retarget() != 0 && start_height % params.blocks_pre_retarget() != 0) {
+        abort EInvalidStartHeight
+    };
+
     let mut lc = LightClient {
         id: object::new(ctx),
         params: params,

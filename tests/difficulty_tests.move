@@ -97,7 +97,7 @@ fun test_difficulty_computation_regtest() {
     let lc = new_light_client_with_params_int(
         params::regtest(),
         10,
-        // note: this is random header and when compute a new target in regtest mode this alway return constant
+        // NOTE: this is random header and when compute a new target in regtest mode this always returns a constant
         // this is power_limit.
         vector[x"0040a320aa52a8971f61e56bf5a45117e3e224eabfef9237cb9a0100000000000000000060a9a5edd4e39b70ee803e3d22673799ae6ec733ea7549442324f9e3a790e4e4b806e1665b250317807427ca"],
         0,
