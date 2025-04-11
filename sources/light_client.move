@@ -67,7 +67,15 @@ fun init(_ctx: &mut TxContext) {
 
 /// LightClient constructor. Use `init_light_client` to create and transfer object,
 /// emitting an event.
-public fun new_light_client(params: Params, start_height: u64, trusted_headers: vector<vector<u8>>, start_chain_work: u256, finality: u64, ctx: &mut TxContext): LightClient {
+/// *params: Btc network params. Check the params module
+/// *start_height: height of the first trusted header 
+/// *trusted_headers: List of trusted headers in hex format.
+/// *parent_chain_work: chain_work at parent block of start_height block.
+/// *finality: the finality threshold
+
+/// Header serialization reference:
+/// https://developer.bitcoin.org/reference/block_chain.html#block-headers
+public fun new_light_client(params: Params, start_height: u64, trusted_headers: vector<vector<u8>>, parent_chain_work: u256, finality: u64, ctx: &mut TxContext): LightClient {
     let mut lc = LightClient {
         id: object::new(ctx),
         params: params,
@@ -76,18 +84,19 @@ public fun new_light_client(params: Params, start_height: u64, trusted_headers: 
         finality,
     };
 
-    let mut current_chain_work = start_chain_work;
+    let mut parent_chain_work = parent_chain_work;
     if (!trusted_headers.is_empty()) {
         let mut height = start_height;
         let mut head_hash = vector[];
         trusted_headers.do!(|raw_header| {
             let header = new_block_header(raw_header);
             head_hash = header.block_hash();
+            let current_chain_work = parent_chain_work + header.calc_work();
             let light_block = new_light_block(height, header, current_chain_work);
             lc.set_block_hash_by_height(height, head_hash);
             lc.insert_light_block(light_block);
             height = height + 1;
-            current_chain_work = current_chain_work + header.calc_work();
+            parent_chain_work = current_chain_work;
         });
 
         lc.head_height = height - 1;
@@ -102,20 +111,20 @@ public fun new_light_client(params: Params, start_height: u64, trusted_headers: 
 /// params: Mainnet, Testnet or Regtest.
 /// start_height: the height of first trust block
 /// trusted_header: The list of trusted header in hex encode.
-/// strart_chain_work: the chain_work at first trusted block.
+/// previous_chain_work: the chain_work at parent block of start_height block
 ///
 /// Header serialization reference:
 /// https://developer.bitcoin.org/reference/block_chain.html#block-headers
-public fun init_light_client(params: Params, start_height: u64, trusted_headers: vector<vector<u8>>, start_chain_work: u256, ctx: &mut TxContext) {
+public fun init_light_client(params: Params, start_height: u64, trusted_headers: vector<vector<u8>>, parent_chain_work: u256, ctx: &mut TxContext) {
     assert!(params.is_correct_init_height(start_height), EInvalidStartHeight);
     let lc = new_light_client(
-            params,
-            start_height,
-            trusted_headers,
-            start_chain_work,
-            8,
-            ctx
-        );
+        params,
+        start_height,
+        trusted_headers,
+        parent_chain_work,
+        8,
+        ctx
+    );
     event::emit(NewLightClientEvent {
         light_client_id: object::id(&lc)
     });
@@ -125,14 +134,14 @@ public fun init_light_client(params: Params, start_height: u64, trusted_headers:
 /// Helper function to initialize new light client.
 /// network: 0 = mainnet, 1 = testnet
 public fun init_light_client_network(
-    network: u8, start_height: u64, start_headers: vector<vector<u8>>, start_chain_work: u256, ctx: &mut TxContext
+    network: u8, start_height: u64, start_headers: vector<vector<u8>>, parent_chain_work: u256, ctx: &mut TxContext
 )  {
     let params = match (network) {
         0 => params::mainnet(),
         1 => params::testnet(),
         _ => params::regtest()
     };
-    init_light_client(params, start_height, start_headers, start_chain_work, ctx);
+    init_light_client(params, start_height, start_headers, parent_chain_work, ctx);
 }
 
 
