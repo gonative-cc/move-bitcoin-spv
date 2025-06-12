@@ -1,0 +1,13 @@
+services:
+  sui-node:
+    container_name: sui-node
+    #TODO: probably for CI dont use arm64
+    image: mysten/sui-tools:testnet-arm64
+    volumes:
+      - ./sui_config:/root/.sui/sui_config
+      - ../:/sui
+    ports:
+      - 9000:9000
+      - 9123:9123
+    command: >
+      /bin/bash -c "RUST_LOG='off,sui_node=info' sui start --with-faucet --force-regenesis && apt install jq -y"

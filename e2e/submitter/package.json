@@ -1,0 +1,19 @@
+{
+  "name": "sui-header-submitter-ts",
+  "version": "1.0.0",
+  "description": "Submits Bitcoin headers to a Sui light client using TypeScript",
+  "main": "dist/submitter.js",
+  "scripts": {
+    "build": "tsc",
+    "submit": "node dist/submitter.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@mysten/sui": "1.21.1",
+	"dotenv": "^16.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.29",
+    "typescript": "^5.4.5"
+  }
+}
